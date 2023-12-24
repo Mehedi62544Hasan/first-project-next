@@ -1,21 +1,42 @@
-import httpStatus, { BAD_REQUEST } from 'http-status';
+import httpStatus from 'http-status';
+import QueryBuilder from '../../builder/QueryBuilder';
 import AppError from '../../errors/AppError';
 import { AcademicSemester } from '../academicSemester/academicSemester.model';
 import { TSemesterRegistration } from './semesterRegistration.interface';
 import { SemesterRegistration } from './semesterRegistration.model';
-import QueryBuilder from '../../builder/QueryBuilder';
+import { RegistrationStatus } from './semesterRegistration.constant';
 
-const createSemesterRegistrationInDb = async (
+const createSemesterRegistrationIntoDB = async (
   payload: TSemesterRegistration,
 ) => {
-  const academicSemester = payload.academicSemester;
+  const academicSemester = payload?.academicSemester;
 
-  const isSemesterExists = await AcademicSemester.findById(academicSemester);
+  //check have UPCOMING OR ONGOING  semester
 
-  if (!isSemesterExists) {
-    throw new AppError(httpStatus.NOT_FOUND, 'This semester is Not Found');
+  const isThereAnyUpcomingOrOngoingSemester =
+    await SemesterRegistration.findOne({
+      $or: [{ status: 'UPCOMING' }, { status: 'ONGOING' }],
+    });
+
+  if (isThereAnyUpcomingOrOngoingSemester) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      `There is already ${isThereAnyUpcomingOrOngoingSemester.status} register semester`,
+    );
   }
 
+  // check if the semester is exist
+  const isAcademicSemesterExists =
+    await AcademicSemester.findById(academicSemester);
+
+  if (!isAcademicSemesterExists) {
+    throw new AppError(
+      httpStatus.NOT_FOUND,
+      'This academic semester not found !',
+    );
+  }
+
+  // check if the semester is already registered!
   const isSemesterRegistrationExists = await SemesterRegistration.findOne({
     academicSemester,
   });
@@ -23,16 +44,15 @@ const createSemesterRegistrationInDb = async (
   if (isSemesterRegistrationExists) {
     throw new AppError(
       httpStatus.CONFLICT,
-      'SemesterRegistration is already registered',
+      'This semester is already registered!',
     );
   }
 
   const result = await SemesterRegistration.create(payload);
-
   return result;
 };
 
-const getAllSemesterRegistrationFromDb = async (
+const getAllSemesterRegistrationsFromDB = async (
   query: Record<string, unknown>,
 ) => {
   const semesterRegistrationQuery = new QueryBuilder(
@@ -54,19 +74,60 @@ const getSingleSemesterRegistrationsFromDB = async (id: string) => {
   return result;
 };
 
-const updateSemesterRegistrationFromDb = async (id: string, payload: Partial<TSemesterRegistration>) => {
-  const requestedSemester = await SemesterRegistration.findById(id);
-  if (requestedSemester?.status === 'ENDED') {
+const updateSemesterRegistrationIntoDB = async (
+  id: string,
+  payload: Partial<TSemesterRegistration>,
+) => {
+  const isSemesterRegistrationExists = await SemesterRegistration.findById(id);
+
+  if (!isSemesterRegistrationExists) {
     throw new AppError(
-      BAD_REQUEST,
-      `requested ${requestedSemester.status} is ENDED`,
+      httpStatus.NOT_FOUND,
+      'This semester registration is not found !',
     );
   }
+
+  const currentSemesterStatus = isSemesterRegistrationExists?.status;
+  const requestedStatus = payload?.status;
+
+  if (currentSemesterStatus === RegistrationStatus.ENDED) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      `This ${currentSemesterStatus} semester already ended`,
+    );
+  }
+
+  if (
+    currentSemesterStatus === RegistrationStatus.UPCOMING &&
+    requestedStatus === RegistrationStatus.ENDED
+  ) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      `You can not directly change status from ${currentSemesterStatus} to ${requestedStatus}`,
+    );
+  }
+
+  if (
+    currentSemesterStatus === RegistrationStatus.ONGOING &&
+    requestedStatus === RegistrationStatus.UPCOMING
+  ) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      `You can not directly change status from ${currentSemesterStatus} to ${requestedStatus}`,
+    );
+  }
+
+  const result = await SemesterRegistration.findByIdAndUpdate(id, payload, {
+    new: true,
+    runValidators: true,
+  });
+
+  return result;
 };
 
-export const semesterRegistrationServices = {
-  createSemesterRegistrationInDb,
-  getAllSemesterRegistrationFromDb,
+export const SemesterRegistrationService = {
+  createSemesterRegistrationIntoDB,
+  getAllSemesterRegistrationsFromDB,
   getSingleSemesterRegistrationsFromDB,
-  updateSemesterRegistrationFromDb,
+  updateSemesterRegistrationIntoDB,
 };

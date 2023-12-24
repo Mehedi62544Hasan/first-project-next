@@ -7,7 +7,7 @@ const userNameSchema = new Schema<TUserName>({
     type: String,
     required: [true, 'First Name is required'],
     trim: true,
-    maxLength: [20, 'Name can not be more than 20 characters'],
+    maxlength: [20, 'Name can not be more than 20 characters'],
   },
   middleName: {
     type: String,
@@ -17,7 +17,7 @@ const userNameSchema = new Schema<TUserName>({
     type: String,
     trim: true,
     required: [true, 'Last Name is required'],
-    maxLength: [20, 'Name can not be more than 20 characters'],
+    maxlength: [20, 'Name can not be more than 20 characters'],
   },
 });
 
